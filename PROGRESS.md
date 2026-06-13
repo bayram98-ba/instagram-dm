@@ -98,9 +98,31 @@ Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 
 
 ---
 
+### ✅ Mərhələ 3 — Real DB + Canlı data (Session 3, 2026-06-14)
+
+#### Yeni server actions (`src/app/actions/chat.ts`):
+- `getAllOrders()` — bütün sifarişlər (product + customer include)
+- `updateOrderStatus(id, status)` — status dəyişdirmə
+- `getProducts()` — bütün məhsullar
+- `upsertProduct(data)` — məhsul əlavə/yenilə
+- `getDashboardData()` — stat kartları + son sifarişlər + diqqət söhbətləri
+- `getSettings()` / `saveSetting()` — tənzimlər
+- `generateDraft()` artıq `order` da qaytarır (UI-a birbaşa bağlı)
+
+#### UI güncəlləmələri:
+- `Inbox.tsx` — `getConversations()` ilə real UUID söhbətlər, mesajlar, sifarişlər yüklənir; `generateDraft` real Prisma id ilə çağırılır; `sendMessage` DB-ə yazır
+- `Orders.tsx` — `getAllOrders()` ilə real sifarişlər; `updateOrderStatus` ilə status yenilənir
+- `Catalog.tsx` — `getProducts()` ilə real məhsullar; `upsertProduct` ilə Drawer-dən save
+- `Dashboard.tsx` — `getDashboardData()` ilə real stat kartları, son sifarişlər, diqqət söhbətləri
+- `ConvoList` + `ChatThread` — `id: number` → `id: string` (Prisma cuid)
+
+#### Status: **HTTP 200** ✅ — `getConversations()` 79ms-də DB-dən gəlir
+
+---
+
 ## Qalan işlər
 
-### 🔲 Mərhələ 3 — Canlı data + real AI cavablar
+### 🔲 Mərhələ 4 — Qalan UX + Instagram inteqrasiyası
 
 ---
 
