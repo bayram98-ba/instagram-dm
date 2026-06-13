@@ -1,9 +1,12 @@
 "use client";
+import { useRef, useState } from "react";
 import { AiTag } from "@/components/ui/AiTag";
 import { Thumb } from "@/components/ui/Thumb";
 import { Button } from "@/components/ui/Button";
-import { IconBag, IconSparkle, IconTruck, IconPhone, IconPin, IconCard, IconX } from "@/components/ui/Icon";
+import { IconBag, IconSparkle, IconX, IconImage } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { readReceiptImage } from "@/app/actions/chat";
+import type { ReceiptData } from "@/lib/ai";
 
 export interface OrderData {
   productName?: string;
@@ -26,6 +29,7 @@ interface OrderPanelProps {
   aiFilledFields: string[];
   onConfirm: () => void;
   onClose?: () => void;
+  onReceiptScan?: (data: ReceiptData) => void;
   className?: string;
 }
 
@@ -54,7 +58,54 @@ function countFilled(order: OrderData): number {
   return fields.filter(v => v !== undefined && v !== null && v !== "").length;
 }
 
-export function OrderPanel({ order, aiFilledFields, onConfirm, onClose, className = "" }: OrderPanelProps) {
+// ── Receipt scanner ────────────────────────────────────────────────────────────
+function ReceiptScanner({ onScan }: { onScan: (data: ReceiptData) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [scanning, setScanning] = useState(false);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScanning(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const [meta, base64] = dataUrl.split(",");
+      const mimeType = (meta.match(/:(.*?);/)?.[1] ?? "image/jpeg") as
+        | "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+      try {
+        const result = await readReceiptImage(base64, mimeType);
+        if (result) onScan(result);
+      } finally {
+        setScanning(false);
+        // reset input so same file can be re-selected
+        if (inputRef.current) inputRef.current.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <>
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden" onChange={handleFile} />
+      <button
+        onClick={() => inputRef.current?.click()}
+        disabled={scanning}
+        title="Ödəniş çekini şəkil kimi yüklə, AI məlumatları oxusun"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-[var(--border)] text-[12px] font-semibold text-[var(--muted)] hover:text-[var(--green-700)] hover:border-[var(--green-300)] transition-colors disabled:opacity-50"
+      >
+        <IconImage size={13} />
+        {scanning ? "Oxunur…" : "Çek"}
+      </button>
+    </>
+  );
+}
+
+// ── Main OrderPanel ────────────────────────────────────────────────────────────
+export function OrderPanel({ order, aiFilledFields, onConfirm, onClose, onReceiptScan, className = "" }: OrderPanelProps) {
   const filled = countFilled(order);
   const total = (order.productPrice ?? 0) * (order.qty ?? 1) + (order.deliveryFee ?? 0);
 
@@ -67,6 +118,7 @@ export function OrderPanel({ order, aiFilledFields, onConfirm, onClose, classNam
           <span className="font-bold text-[14px] text-[var(--ink)]">Sifariş kartı</span>
         </div>
         <div className="flex items-center gap-2">
+          {onReceiptScan && <ReceiptScanner onScan={onReceiptScan} />}
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--green-050)] text-[var(--green-600)] text-[11px] font-bold border border-[var(--green-200)]">
             <IconSparkle size={11} /> {filled}/6 sahə
           </span>
@@ -94,14 +146,14 @@ export function OrderPanel({ order, aiFilledFields, onConfirm, onClose, classNam
 
         {/* Fields */}
         <div className="px-4 py-1">
-          <Field label="Variant"    value={order.variant}        aiKey="variant"    aiFields={aiFilledFields} />
-          <Field label="Miqdar"     value={order.qty}            aiKey="qty"        aiFields={aiFilledFields} />
-          <Field label="Müştəri"    value={order.customerName}   aiKey="customerName" aiFields={aiFilledFields} />
-          <Field label="Telefon"    value={order.phone}          aiKey="phone"      aiFields={aiFilledFields} />
-          <Field label="Ünvan"      value={order.address}        aiKey="address"    aiFields={aiFilledFields} />
+          <Field label="Variant"    value={order.variant}       aiKey="variant"      aiFields={aiFilledFields} />
+          <Field label="Miqdar"     value={order.qty}           aiKey="qty"          aiFields={aiFilledFields} />
+          <Field label="Müştəri"    value={order.customerName}  aiKey="customerName" aiFields={aiFilledFields} />
+          <Field label="Telefon"    value={order.phone}         aiKey="phone"        aiFields={aiFilledFields} />
+          <Field label="Ünvan"      value={order.address}       aiKey="address"      aiFields={aiFilledFields} />
           <Field label="Çatdırılma" value={order.deliveryZone ? `${order.deliveryZone} · ${order.deliveryFee ?? 0}₼` : undefined}
-                                                                 aiKey="deliveryZone" aiFields={aiFilledFields} />
-          <Field label="Ödəniş"    value={order.paymentMethod}  aiKey="paymentMethod" aiFields={aiFilledFields} />
+                                                                aiKey="deliveryZone" aiFields={aiFilledFields} />
+          <Field label="Ödəniş"    value={order.paymentMethod} aiKey="paymentMethod" aiFields={aiFilledFields} />
         </div>
 
         {/* Total */}

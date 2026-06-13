@@ -8,6 +8,7 @@ import { Inbox } from "@/components/inbox/Inbox";
 import { Orders } from "@/components/orders/Orders";
 import { Catalog } from "@/components/catalog/Catalog";
 import { Settings } from "@/components/settings/Settings";
+import { ToastProvider } from "@/components/ui/Toast";
 
 type Screen = "dashboard" | "inbox" | "orders" | "catalog" | "settings";
 
@@ -24,15 +25,17 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--cream-bg)]">
-      <Sidebar active={screen} onNav={setScreen} unread={unread} />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Topbar screen={screen} />
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-          {screens[screen]}
-        </main>
+    <ToastProvider>
+      <div className="flex h-screen overflow-hidden bg-[var(--cream-bg)]">
+        <Sidebar active={screen} onNav={setScreen} unread={unread} />
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          <Topbar screen={screen} />
+          <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+            {screens[screen]}
+          </main>
+        </div>
+        <BottomTabs active={screen} onNav={setScreen} unread={unread} />
       </div>
-      <BottomTabs active={screen} onNav={setScreen} unread={unread} />
-    </div>
+    </ToastProvider>
   );
 }

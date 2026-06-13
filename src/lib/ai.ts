@@ -110,6 +110,64 @@ Cavabını aşağıdakı JSON formatında ver:
 aiFilledFields-ə YALNIZ BU SÖHBƏTDƏ yeni öyrənilən sahələri daxil et (əvvəllər bilinənləri yox).`;
 }
 
+// ── Receipt / payment screenshot reading ─────────────────────────────────────
+
+export interface ReceiptData {
+  customerName: string | null;
+  phone: string | null;
+  total: number | null;
+  address: string | null;
+  paymentMethod: string | null;
+  confirmed: boolean;
+}
+
+export async function readReceipt(
+  imageBase64: string,
+  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+): Promise<ReceiptData | null> {
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 512,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: imageBase64 },
+          },
+          {
+            type: "text",
+            text: `Bu ödəniş çeki və ya bank köçürməsi screenshot-udur. Şəkildən aşağıdakı məlumatları çıxar:
+
+{
+  "customerName": "göndərənin / alıcının adı (varsa, null yoxsa)",
+  "phone": "telefon nömrəsi (varsa, null yoxsa)",
+  "total": ödənilən məbləğ rəqəmlə — yalnız ədəd (varsa, null yoxsa),
+  "address": "çatdırılma ünvanı (varsa, null yoxsa)",
+  "paymentMethod": "ödəniş üsulu: Nağd, Bank kartı və ya M10 (varsa, null yoxsa)",
+  "confirmed": true əgər ödəniş uğurlu görünürsə, false əgər qeyri-müəyyəndirsə
+}
+
+Yalnız JSON qaytar. Şərhsiz.`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.content[0].type === "text" ? response.content[0].text : "";
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]) as ReceiptData;
+  } catch {
+    return null;
+  }
+}
+
+// ── Chat response ─────────────────────────────────────────────────────────────
+
 export async function generateAiResponse(
   messages: Message[],
   products: Product[],

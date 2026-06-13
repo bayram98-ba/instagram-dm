@@ -65,7 +65,7 @@ const prisma = new PrismaClient({ adapter } as any);
 - `getConversations()` — bütün söhbətlər (customer, messages, orders include)
 - `getConversation(id)` — tək söhbət
 - `sendMessage(conversationId, text)` — mesaj göndər (outgoing)
-- `generateDraft(conversationId)` → AI draft + order upsert
+- `generateDraft(conversationId)` → AI draft + order upsert + **orderId** qaytarır
 - `confirmOrder(orderId)` → status: Yeni → Təsdiqlənib
 - `setConversationMode(conversationId, mode)` → semi | auto
 
@@ -76,8 +76,6 @@ const prisma = new PrismaClient({ adapter } as any);
 - Plus Jakarta Sans Google Font (latin-ext subset)
 
 ---
-
-## Tamamlananlar (davam)
 
 ### ✅ Mərhələ 2 — UI Komponentlər (Session 2, 2026-06-14)
 
@@ -92,10 +90,6 @@ Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 
 - `src/components/catalog/Catalog.tsx`
 - `src/components/settings/Settings.tsx`
 
-**Texniki düzəltmə:**
-- `globals.css` — Google Fonts `@import` Tailwind 4 PostCSS conflict → `layout.tsx` `<link>` olaraq köçürüldü
-- `next.config.ts` — `turbopack.root` əlavə edildi
-
 ---
 
 ### ✅ Mərhələ 3 — Real DB + Canlı data (Session 3, 2026-06-14)
@@ -107,22 +101,89 @@ Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 
 - `upsertProduct(data)` — məhsul əlavə/yenilə
 - `getDashboardData()` — stat kartları + son sifarişlər + diqqət söhbətləri
 - `getSettings()` / `saveSetting()` — tənzimlər
-- `generateDraft()` artıq `order` da qaytarır (UI-a birbaşa bağlı)
 
 #### UI güncəlləmələri:
-- `Inbox.tsx` — `getConversations()` ilə real UUID söhbətlər, mesajlar, sifarişlər yüklənir; `generateDraft` real Prisma id ilə çağırılır; `sendMessage` DB-ə yazır
+- `Inbox.tsx` — `getConversations()` ilə real UUID söhbətlər, mesajlar, sifarişlər yüklənir
 - `Orders.tsx` — `getAllOrders()` ilə real sifarişlər; `updateOrderStatus` ilə status yenilənir
 - `Catalog.tsx` — `getProducts()` ilə real məhsullar; `upsertProduct` ilə Drawer-dən save
 - `Dashboard.tsx` — `getDashboardData()` ilə real stat kartları, son sifarişlər, diqqət söhbətləri
-- `ConvoList` + `ChatThread` — `id: number` → `id: string` (Prisma cuid)
 
-#### Status: **HTTP 200** ✅ — `getConversations()` 79ms-də DB-dən gəlir
+---
+
+### ✅ Mərhələ 4 — UX Yeniləmələri + Instagram İnteqrasiyası (Session 4, 2026-06-14)
+
+#### Bug düzəltmələri:
+- `generateDraft` artıq `orderId` qaytarır — `Inbox` onu state-də saxlayır
+- `confirmOrder(orderId)` real DB-yə yazır (əvvəl yalnız lokal state dəyişirdi)
+
+#### Toast bildiriş sistemi (`src/components/ui/Toast.tsx`):
+- `ToastProvider` + `useToast()` hook
+- `AppShell` `ToastProvider` ilə sarılmışdır
+- Sifariş təsdiqlənəndə, Settings-də save ediləndə toast çıxır
+
+#### Inbox UX yenilikləri:
+- **Dev test düyməsi**: `NODE_ENV=development` halında "📨 Müştəri mesajı simulyasiya et" düyməsi görünür
+- `receiveIncomingMessage()` server action — incoming message DB-ə yazır (webhook-dan da istifadə edir)
+- `deleteProduct()` server action əlavə edildi
+
+#### Settings — Real DB inteqrasiyası:
+- `getSettings()` ilə yüklənir (öncə hardcoded idi)
+- Ödəniş üsulları toggle → `saveSetting("paymentMethods", ...)` ilə DB-ə yazılır
+- FAQ: əlavə et / sil → `saveSetting("faq", ...)` ilə DB-ə yazılır
+- AI rejimi: `saveSetting("defaultMode", ...)` ilə DB-ə yazılır
+- Instagram bölməsindəki Webhook URL-i real domain-ə əsaslanır
+
+#### Instagram Webhook (`src/app/api/instagram/webhook/route.ts`):
+- **GET** — Meta webhook doğrulaması (`META_VERIFY_TOKEN` ilə)
+- **POST** — DM qəbul edir; `x-hub-signature-256` ilə imzanı yoxlayır
+- Instagram sender ID → söhbət mapping: `ig_conv_{senderId}` setting key-i
+- Yeni sender üçün avtomatik `Customer` + `Conversation` yaradır
+- **Auto rejim**: AI cavab hazırlayır, DB-ə yazır, `sendInstagramMessage()` ilə göndərir
+
+#### Instagram helper (`src/lib/instagram.ts`):
+- `sendInstagramMessage(recipientId, text)` — Meta Graph API v22.0
+
+#### `.env.example` yeniləndi:
+- `META_VERIFY_TOKEN` — webhook verify token
+- `META_APP_SECRET` — imza yoxlaması üçün
+- `META_PAGE_ACCESS_TOKEN` — DM göndərmək üçün
+
+---
+
+### ✅ Mərhələ 5 — İstehsal hazırlığı (Session 5, 2026-06-14)
+
+#### PostgreSQL dəstəyi:
+- `@prisma/adapter-pg` + `pg` + `@types/pg` quraşdırıldı
+- `src/lib/db.ts` — `DATABASE_URL` prefiksə əsasən adapter avtomatik seçilir:
+  - `file:` → `PrismaBetterSqlite3` (dev)
+  - `postgresql://` / `postgres://` → `PrismaPg` (prod)
+- `package.json` build skripti: `prisma generate && next build`
+- `vercel.json` yaradıldı (buildCommand + framework)
+
+#### Çek oxuma — Claude Vision (`src/lib/ai.ts`):
+- `readReceipt(imageBase64, mediaType)` → `ReceiptData` çıxarır
+- Model: `claude-haiku-4-5-20251001` (vision dəstəkli)
+- Sahələr: `customerName`, `phone`, `total`, `address`, `paymentMethod`, `confirmed`
+- Server action: `readReceiptImage()` (`src/app/actions/chat.ts`-də)
+
+#### Çek scanner UI:
+- `OrderPanel.tsx` — başlıqda "Çek" düyməsi (IconImage)
+- Fayl seçilir → FileReader → base64 → `readReceiptImage()` → sahələr avtomatik doldurulur
+- `Inbox.tsx` — `handleReceiptScan()` ilə toast + order state güncəlləmə
 
 ---
 
 ## Qalan işlər
 
-### 🔲 Mərhələ 4 — Qalan UX + Instagram inteqrasiyası
+### 🔲 Mərhələ 6 — Deployment + Meta Review
+
+- [ ] Production PostgreSQL (Neon / Vercel Postgres / Supabase)
+- [ ] `schema.prisma`-da `provider = "postgresql"` dəyişikliyi
+- [ ] `prisma migrate deploy` production-da
+- [ ] Vercel-ə deploy + env variables qurulumu
+- [ ] Meta App Review — `instagram_manage_messages` izni
+- [ ] Uzun ömürlü page access token
+- [ ] Production domain ilə Instagram webhook aktivləşdirmə
 
 ---
 
@@ -138,18 +199,46 @@ Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 
 │   ├── generated/prisma/      ✅ (npx prisma generate)
 │   ├── lib/
 │   │   ├── db.ts              ✅ Prisma client singleton
-│   │   └── ai.ts              ✅ Claude AI core function
+│   │   ├── ai.ts              ✅ Claude AI core function
+│   │   └── instagram.ts       ✅ sendInstagramMessage helper
 │   └── app/
 │       ├── actions/
-│       │   └── chat.ts        ✅ Server actions
+│       │   └── chat.ts        ✅ Server actions (tam)
+│       ├── api/
+│       │   └── instagram/
+│       │       └── webhook/
+│       │           └── route.ts ✅ GET verify + POST receive
 │       ├── globals.css        ✅ Design tokens + font
 │       ├── layout.tsx         ✅
-│       └── page.tsx           🔲 (hələ default Next.js)
-├── .env                       ✅ (gitignored — ANTHROPIC_API_KEY + DATABASE_URL)
-├── .env.example               ✅
+│       └── page.tsx           ✅ → AppShell
+├── src/components/
+│   ├── ui/
+│   │   ├── Icon.tsx           ✅
+│   │   ├── Toast.tsx          ✅ ToastProvider + useToast
+│   │   ├── Button.tsx         ✅
+│   │   ├── StatusBadge.tsx    ✅
+│   │   ├── AiTag.tsx          ✅
+│   │   └── Thumb.tsx          ✅
+│   ├── layout/
+│   │   ├── AppShell.tsx       ✅ (ToastProvider ilə sarılmış)
+│   │   ├── Sidebar.tsx        ✅
+│   │   ├── Topbar.tsx         ✅
+│   │   └── BottomTabs.tsx     ✅
+│   ├── inbox/
+│   │   ├── Inbox.tsx          ✅ (orderId fix + confirmOrder + test button)
+│   │   ├── ConvoList.tsx      ✅
+│   │   ├── ChatThread.tsx     ✅
+│   │   ├── ChatHeader.tsx     ✅
+│   │   ├── AiComposer.tsx     ✅
+│   │   └── OrderPanel.tsx     ✅
+│   ├── dashboard/Dashboard.tsx ✅
+│   ├── orders/Orders.tsx       ✅
+│   ├── catalog/Catalog.tsx     ✅
+│   └── settings/Settings.tsx  ✅ (real DB inteqrasiyası)
+├── .env                       ✅ (gitignored)
+├── .env.example               ✅ (Meta vars əlavə edildi)
 ├── CLAUDE.md                  ✅
-├── PROGRESS.md                ✅ (bu fayl)
-└── package.json               ✅
+└── PROGRESS.md                ✅ (bu fayl)
 ```
 
 ---
@@ -168,12 +257,6 @@ new PrismaClient({ datasourceUrl: "..." })
 new PrismaClient() // adapter olmadan
 ```
 
-### Seed yenilənməsi
-```bash
-cd /Users/abdullayevbe/sifarish
-npm run db:seed
-```
-
 ### DB yenidən sıfırlamaq lazım olsa
 ```bash
 rm prisma/dev.db
@@ -181,40 +264,22 @@ npx prisma migrate dev
 npm run db:seed
 ```
 
-### Generated client
-```bash
-npx prisma generate   # schema dəyişəndə
-```
+### Instagram Webhook qurulumu
+1. `.env`-ə `META_VERIFY_TOKEN`, `META_APP_SECRET`, `META_PAGE_ACCESS_TOKEN` əlavə et
+2. `ngrok http 3000` ilə public URL al
+3. Meta Developer Panel → App → Webhooks → `{ngrok-url}/api/instagram/webhook`
+4. Subscribe: `messages` permission
 
----
-
-## Design Handoff
-
-Tam dizayn kodu `Sifaris-handoff-full.md` faylındadır (istifadəçi tərəfindən verildi).
-
-**Əsas fayllar:**
-- `app/sifaris.css` — bütün CSS tokenlar (globals.css-ə köçürüldü ✅)
-- `app/data.js` — seed datası kimi istifadə edildi ✅
-- `app/icons.jsx` → `src/components/ui/Icon.tsx` olaraq yazılacaq 🔲
-- `app/common.jsx` → shared UI komponentlər 🔲
-- `app/inbox.jsx` → Söhbətlər hero ekranı 🔲
-- `app/screens-a.jsx` → İcmal + Sifarişlər 🔲
-- `app/screens-b.jsx` → Kataloq + Tənzimlər 🔲
-- `app/app.jsx` → AppShell 🔲
-
-**Default seçimlər:**
-- Accent rəng: Emerald `#2E7D5B`
-- Şrift: Plus Jakarta Sans
-- Inbox layout: Yan-yana (split)
-- Rejim: Yarı-avtomat (semi)
+### Dev-mode test
+`npm run dev` işlədib Söhbətlər ekranında "📨 Müştəri mesajı simulyasiya et" düyməsini sınaın.
 
 ---
 
 ## Növbəti session üçün prompt
 
 ```
-PROGRESS.md-i oxu. Sifarish layihəsinin Phase 1 core-u tamamdır.
-İndi UI komponentlərinə başlayırıq — prioritet sırası PROGRESS.md-də yazılıb.
-Başla: Icon.tsx → shared UI → AppShell → Söhbətlər (Inbox hero).
-Handoff kodu Sifaris-handoff-full.md-dədir.
+PROGRESS.md-i oxu. Sifarish layihəsi Mərhələ 5 tamamdır.
+Dev server: npm run dev → http://localhost:3000
+Seed: npm run db:seed (dev.db project root-dadır)
+Qalan: Mərhələ 6 — Vercel deploy + PostgreSQL (schema.prisma provider dəyişikliyi + migrate) + Meta App Review.
 ```

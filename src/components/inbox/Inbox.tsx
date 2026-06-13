@@ -5,7 +5,16 @@ import { ChatThread, Message } from "./ChatThread";
 import { ChatHeader } from "./ChatHeader";
 import { AiComposer } from "./AiComposer";
 import { OrderPanel, OrderData } from "./OrderPanel";
-import { getConversations, generateDraft, sendMessage, setConversationMode } from "@/app/actions/chat";
+import {
+  getConversations,
+  generateDraft,
+  sendMessage,
+  setConversationMode,
+  confirmOrder,
+  receiveIncomingMessage,
+} from "@/app/actions/chat";
+import { useToast } from "@/components/ui/Toast";
+import type { ReceiptData } from "@/lib/ai";
 
 function fmtTime(d: Date | string) {
   return new Date(d).toLocaleTimeString("az", { hour: "2-digit", minute: "2-digit" });
@@ -22,11 +31,21 @@ function toneName(hex: string): string {
   return map[hex.toLowerCase()] ?? "green";
 }
 
+const TEST_MESSAGES = [
+  "Bu məhsul hələ var?",
+  "Bakıya dostavka neçəyədi?",
+  "M ölçüsü var?",
+  "Qara rəngdə var?",
+  "Nağd ödəniş olur?",
+  "Neçə gündə çatdırırsız?",
+];
+
 export function Inbox() {
   const [convos, setConvos] = useState<Convo[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [order, setOrder] = useState<OrderData>({});
+  const [orderId, setOrderId] = useState<string | null>(null);
   const [aiFilledFields, setAiFilledFields] = useState<string[]>([]);
   const [draft, setDraft] = useState<string | null>(null);
   const [mode, setMode] = useState<"semi" | "auto">("semi");
@@ -35,10 +54,11 @@ export function Inbox() {
   const [showOrderPanel, setShowOrderPanel] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  // Raw DB data cache (keyed by conversation id)
-  const [rawConvos, setRawConvos] = useState<Awaited<ReturnType<typeof getConversations>>>([]);
+  const rawConvosRef = useState<Awaited<ReturnType<typeof getConversations>>>([]);
+  const [rawConvos, setRawConvos] = rawConvosRef;
 
-  // Load all conversations on mount
+  const toast = useToast();
+
   useEffect(() => {
     getConversations().then(data => {
       setRawConvos(data);
@@ -52,7 +72,7 @@ export function Inbox() {
         online: false,
       }));
       setConvos(mapped);
-      if (mapped.length && !selectedId) {
+      if (mapped.length) {
         selectConvo(data[0].id, data);
       }
       setLoading(false);
@@ -69,7 +89,6 @@ export function Inbox() {
     setMode(raw.mode as "semi" | "auto");
     setDraft(null);
 
-    // Map messages
     const msgs: Message[] = raw.messages.map(m => ({
       id: m.id,
       direction: m.direction as "incoming" | "outgoing",
@@ -79,9 +98,9 @@ export function Inbox() {
     }));
     setMessages(msgs);
 
-    // Map order from latest order in convo
     const latestOrder = raw.orders[0];
     if (latestOrder) {
+      setOrderId(latestOrder.id);
       const prod = (raw as { orders: (typeof raw.orders[0] & { product?: { emoji?: string; tone?: string } | null })[] }).orders[0];
       setOrder({
         productName: latestOrder.productName ?? undefined,
@@ -100,15 +119,37 @@ export function Inbox() {
       });
       setAiFilledFields(JSON.parse(latestOrder.aiFilledFields) as string[]);
     } else {
+      setOrderId(null);
       setOrder({});
       setAiFilledFields([]);
     }
 
-    // Mark as read
     setConvos(prev => prev.map(c => c.id === id ? { ...c, unread: 0 } : c));
   }
 
   const handleSelect = (id: string) => selectConvo(id);
+
+  function applyOrderResult(res: { order: Record<string, unknown>; aiFilledFields: string[]; orderId?: string }) {
+    if (res.orderId) setOrderId(res.orderId);
+    if (res.order) {
+      setOrder(prev => ({
+        ...prev,
+        productName: (res.order.productName ?? prev.productName) as string | undefined,
+        variant: (res.order.variant ?? prev.variant) as string | undefined,
+        qty: (res.order.qty ?? prev.qty) as number | undefined,
+        customerName: (res.order.customerName ?? prev.customerName) as string | undefined,
+        phone: (res.order.phone ?? prev.phone) as string | undefined,
+        address: (res.order.address ?? prev.address) as string | undefined,
+        deliveryZone: (res.order.zone ?? prev.deliveryZone) as string | undefined,
+        deliveryFee: (res.order.deliveryFee ?? prev.deliveryFee) as number | undefined,
+        paymentMethod: (res.order.paymentMethod ?? prev.paymentMethod) as string | undefined,
+        total: (res.order.total ?? prev.productPrice) as number | undefined,
+      }));
+    }
+    if (res.aiFilledFields?.length) {
+      setAiFilledFields(prev => [...new Set([...prev, ...res.aiFilledFields])]);
+    }
+  }
 
   const handleSend = useCallback(async (text: string) => {
     if (!selectedId) return;
@@ -116,43 +157,23 @@ export function Inbox() {
     setMessages(prev => [...prev, { id: Date.now().toString(), direction: "outgoing", text, time: now }]);
     setDraft(null);
 
-    // Persist to DB
     try { await sendMessage(selectedId, text); } catch { /* offline fallback */ }
 
-    // Simulate customer typing → reply → AI draft
     setIsTyping(true);
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 1800));
     setIsTyping(false);
 
-    // In production: incoming message arrives via webhook.
-    // For local testing we skip fake reply; just auto-generate AI draft.
     setDraftLoading(true);
     try {
       const res = await generateDraft(selectedId);
       if (res.draft) setDraft(res.draft);
-      if (res.order) {
-        setOrder(prev => ({
-          ...prev,
-          productName: res.order.productName ?? prev.productName,
-          variant: res.order.variant ?? prev.variant,
-          qty: res.order.qty ?? prev.qty,
-          customerName: res.order.customerName ?? prev.customerName,
-          phone: res.order.phone ?? prev.phone,
-          address: res.order.address ?? prev.address,
-          deliveryZone: res.order.zone ?? prev.deliveryZone,
-          deliveryFee: res.order.deliveryFee ?? prev.deliveryFee,
-          paymentMethod: res.order.paymentMethod ?? prev.paymentMethod,
-          total: res.order.total ?? prev.productPrice,
-        }));
-      }
-      if (res.aiFilledFields?.length) {
-        setAiFilledFields(prev => [...new Set([...prev, ...res.aiFilledFields])]);
-      }
+      applyOrderResult(res as Parameters<typeof applyOrderResult>[0]);
     } catch {
       setDraft("Başa düşdüm! Əlavə məlumat lazımdır.");
     } finally {
       setDraftLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   const handleGenerateDraft = useCallback(async () => {
@@ -161,33 +182,47 @@ export function Inbox() {
     try {
       const res = await generateDraft(selectedId);
       if (res.draft) setDraft(res.draft);
-      if (res.order) {
-        setOrder(prev => ({
-          ...prev,
-          productName: res.order.productName ?? prev.productName,
-          variant: res.order.variant ?? prev.variant,
-          customerName: res.order.customerName ?? prev.customerName,
-          phone: res.order.phone ?? prev.phone,
-          address: res.order.address ?? prev.address,
-          deliveryZone: res.order.zone ?? prev.deliveryZone,
-          deliveryFee: res.order.deliveryFee ?? prev.deliveryFee,
-          paymentMethod: res.order.paymentMethod ?? prev.paymentMethod,
-        }));
-      }
-      if (res.aiFilledFields?.length) {
-        setAiFilledFields(prev => [...new Set([...prev, ...res.aiFilledFields])]);
-      }
+      applyOrderResult(res as Parameters<typeof applyOrderResult>[0]);
     } catch (e) {
       console.error("Draft error:", e);
       setDraft("Salam! Necə kömək edə bilərəm?");
     } finally {
       setDraftLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   const handleConfirm = useCallback(async () => {
-    setOrder(prev => ({ ...prev, status: "Təsdiqlənib" }));
-  }, []);
+    if (!orderId) {
+      setOrder(prev => ({ ...prev, status: "Təsdiqlənib" }));
+      return;
+    }
+    try {
+      await confirmOrder(orderId);
+      setOrder(prev => ({ ...prev, status: "Təsdiqlənib" }));
+      toast("Sifariş təsdiqləndi!");
+    } catch {
+      toast("Xəta baş verdi", "error");
+    }
+  }, [orderId, toast]);
+
+  const handleReceiptScan = useCallback((data: ReceiptData) => {
+    const merged: Partial<OrderData> = {};
+    if (data.customerName) merged.customerName = data.customerName;
+    if (data.phone)        merged.phone = data.phone;
+    if (data.address)      merged.address = data.address;
+    if (data.paymentMethod) merged.paymentMethod = data.paymentMethod;
+    if (data.total)        merged.productPrice = data.total;
+
+    setOrder(prev => ({ ...prev, ...merged }));
+
+    const count = Object.keys(merged).length;
+    if (count > 0) {
+      toast(`Çekdən ${count} sahə oxundu!`);
+    } else {
+      toast("Çekdə məlumat tapılmadı", "error");
+    }
+  }, [toast]);
 
   const handleModeChange = useCallback(async (m: "semi" | "auto") => {
     setMode(m);
@@ -195,6 +230,31 @@ export function Inbox() {
     if (selectedId) {
       try { await setConversationMode(selectedId, m); } catch { /* offline */ }
     }
+  }, [selectedId]);
+
+  const handleTestMessage = useCallback(async () => {
+    if (!selectedId) return;
+    const text = TEST_MESSAGES[Math.floor(Math.random() * TEST_MESSAGES.length)];
+    const now = fmtTime(new Date());
+
+    try {
+      await receiveIncomingMessage(selectedId, text);
+    } catch { /* offline */ }
+
+    setMessages(prev => [...prev, { id: Date.now().toString(), direction: "incoming", text, time: now }]);
+    setConvos(prev => prev.map(c => c.id === selectedId ? { ...c, unread: c.unread + 1, lastMessage: text, lastTime: now } : c));
+
+    // Auto-generate AI draft
+    await new Promise(r => setTimeout(r, 600));
+    setDraftLoading(true);
+    try {
+      const res = await generateDraft(selectedId);
+      if (res.draft) setDraft(res.draft);
+      applyOrderResult(res as Parameters<typeof applyOrderResult>[0]);
+    } catch { /* ignore */ } finally {
+      setDraftLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   const selectedConvo = convos.find(c => c.id === selectedId);
@@ -236,6 +296,20 @@ export function Inbox() {
           />
         )}
         <ChatThread messages={messages} isTyping={isTyping} isAuto={mode === "auto"} />
+
+        {/* Dev-only: simulate incoming message */}
+        {process.env.NODE_ENV === "development" && selectedId && (
+          <div className="px-4 py-1.5 bg-amber-50 border-t border-amber-200 flex items-center gap-2 shrink-0">
+            <span className="text-[11px] text-amber-600 font-bold uppercase tracking-wide">Dev</span>
+            <button
+              onClick={handleTestMessage}
+              className="text-[12px] text-amber-700 font-semibold hover:text-amber-900 transition-colors"
+            >
+              📨 Müştəri mesajı simulyasiya et
+            </button>
+          </div>
+        )}
+
         <AiComposer
           draft={draft}
           mode={mode}
@@ -252,6 +326,7 @@ export function Inbox() {
           aiFilledFields={aiFilledFields}
           onConfirm={handleConfirm}
           onClose={() => setShowOrderPanel(false)}
+          onReceiptScan={handleReceiptScan}
         />
       )}
     </div>

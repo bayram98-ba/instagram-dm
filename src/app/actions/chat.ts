@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { generateAiResponse } from "@/lib/ai";
+import { generateAiResponse, readReceipt } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 
 // ─── Conversations ───────────────────────────────────────────────────────────
@@ -134,16 +134,19 @@ export async function generateDraft(conversationId: string) {
     aiFilledFields: JSON.stringify(newFilled),
   };
 
+  let savedOrderId: string;
   if (existingOrder) {
     await prisma.order.update({ where: { id: existingOrder.id }, data: orderData });
+    savedOrderId = existingOrder.id;
   } else {
-    await prisma.order.create({
+    const created = await prisma.order.create({
       data: {
         conversationId,
         customerId: conv.customerId ?? undefined,
         ...orderData,
       },
     });
+    savedOrderId = created.id;
   }
 
   revalidatePath("/");
@@ -151,6 +154,7 @@ export async function generateDraft(conversationId: string) {
     draft: aiResult.draft,
     aiFilledFields: aiResult.aiFilledFields,
     order: orderData,
+    orderId: savedOrderId,
   };
 }
 
@@ -241,6 +245,35 @@ export async function saveSetting(key: string, value: unknown) {
     create: { key, value: JSON.stringify(value) },
   });
   revalidatePath("/");
+}
+
+// ─── Incoming message (local test + webhook) ─────────────────────────────────
+
+export async function receiveIncomingMessage(conversationId: string, text: string) {
+  await prisma.message.create({
+    data: { conversationId, direction: "incoming", text, isAiGenerated: false },
+  });
+  await prisma.conversation.update({
+    where: { id: conversationId },
+    data: { unreadCount: { increment: 1 }, lastMessageAt: new Date() },
+  });
+  revalidatePath("/");
+}
+
+// ─── Catalog ─────────────────────────────────────────────────────────────────
+
+export async function deleteProduct(id: string) {
+  await prisma.product.delete({ where: { id } });
+  revalidatePath("/");
+}
+
+// ─── Receipt reading (Claude Vision) ─────────────────────────────────────────
+
+export async function readReceiptImage(
+  imageBase64: string,
+  mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp"
+) {
+  return readReceipt(imageBase64, mediaType);
 }
 
 // ─── Dashboard stats ─────────────────────────────────────────────────────────
