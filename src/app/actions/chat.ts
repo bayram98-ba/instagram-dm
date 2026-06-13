@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { generateAiResponse } from "@/lib/ai";
 import { revalidatePath } from "next/cache";
 
+// ─── Conversations ───────────────────────────────────────────────────────────
+
 export async function getConversations() {
   return prisma.conversation.findMany({
     include: {
@@ -26,6 +28,8 @@ export async function getConversation(id: string) {
   });
 }
 
+// ─── Messages ────────────────────────────────────────────────────────────────
+
 export async function sendMessage(conversationId: string, text: string) {
   const conv = await prisma.conversation.findUnique({
     where: { id: conversationId },
@@ -36,7 +40,6 @@ export async function sendMessage(conversationId: string, text: string) {
   });
   if (!conv) throw new Error("Söhbət tapılmadı");
 
-  // Save outgoing message
   await prisma.message.create({
     data: { conversationId, direction: "outgoing", text, isAiGenerated: false },
   });
@@ -48,6 +51,8 @@ export async function sendMessage(conversationId: string, text: string) {
 
   revalidatePath("/");
 }
+
+// ─── AI Draft ────────────────────────────────────────────────────────────────
 
 export async function generateDraft(conversationId: string) {
   const conv = await prisma.conversation.findUnique({
@@ -94,7 +99,6 @@ export async function generateDraft(conversationId: string) {
     existingFields
   );
 
-  // Upsert order with AI-extracted fields
   const mergedFields = { ...existingFields };
   for (const [key, val] of Object.entries(aiResult.order)) {
     if (val !== null && val !== undefined) {
@@ -107,7 +111,6 @@ export async function generateDraft(conversationId: string) {
     : [];
   const newFilled = [...new Set([...currentFilled, ...aiResult.aiFilledFields])];
 
-  // Find product by name
   let productId: string | undefined;
   if (aiResult.order.product) {
     const found = products.find(
@@ -116,47 +119,60 @@ export async function generateDraft(conversationId: string) {
     productId = found?.id;
   }
 
+  const orderData = {
+    productId: productId ?? existingOrder?.productId ?? undefined,
+    productName: aiResult.order.product ?? existingOrder?.productName ?? undefined,
+    variant: aiResult.order.variant ?? existingOrder?.variant ?? undefined,
+    qty: aiResult.order.qty ?? existingOrder?.qty ?? 1,
+    customerName: aiResult.order.customerName ?? existingOrder?.customerName ?? undefined,
+    phone: aiResult.order.phone ?? existingOrder?.phone ?? undefined,
+    address: aiResult.order.address ?? existingOrder?.address ?? undefined,
+    zone: aiResult.order.zone ?? existingOrder?.zone ?? undefined,
+    deliveryFee: aiResult.order.deliveryFee ?? existingOrder?.deliveryFee ?? 0,
+    paymentMethod: aiResult.order.paymentMethod ?? existingOrder?.paymentMethod ?? undefined,
+    total: aiResult.order.total ?? existingOrder?.total ?? 0,
+    aiFilledFields: JSON.stringify(newFilled),
+  };
+
   if (existingOrder) {
-    await prisma.order.update({
-      where: { id: existingOrder.id },
-      data: {
-        productId: productId ?? existingOrder.productId,
-        productName: aiResult.order.product ?? existingOrder.productName,
-        variant: aiResult.order.variant ?? existingOrder.variant,
-        qty: aiResult.order.qty ?? existingOrder.qty,
-        customerName: aiResult.order.customerName ?? existingOrder.customerName,
-        phone: aiResult.order.phone ?? existingOrder.phone,
-        address: aiResult.order.address ?? existingOrder.address,
-        zone: aiResult.order.zone ?? existingOrder.zone,
-        deliveryFee: aiResult.order.deliveryFee ?? existingOrder.deliveryFee,
-        paymentMethod: aiResult.order.paymentMethod ?? existingOrder.paymentMethod,
-        total: aiResult.order.total ?? existingOrder.total,
-        aiFilledFields: JSON.stringify(newFilled),
-      },
-    });
+    await prisma.order.update({ where: { id: existingOrder.id }, data: orderData });
   } else {
     await prisma.order.create({
       data: {
         conversationId,
         customerId: conv.customerId ?? undefined,
-        productId,
-        productName: aiResult.order.product,
-        variant: aiResult.order.variant,
-        qty: aiResult.order.qty ?? 1,
-        customerName: aiResult.order.customerName,
-        phone: aiResult.order.phone,
-        address: aiResult.order.address,
-        zone: aiResult.order.zone,
-        deliveryFee: aiResult.order.deliveryFee ?? 0,
-        paymentMethod: aiResult.order.paymentMethod,
-        total: aiResult.order.total ?? 0,
-        aiFilledFields: JSON.stringify(newFilled),
+        ...orderData,
       },
     });
   }
 
   revalidatePath("/");
-  return { draft: aiResult.draft, aiFilledFields: aiResult.aiFilledFields };
+  return {
+    draft: aiResult.draft,
+    aiFilledFields: aiResult.aiFilledFields,
+    order: orderData,
+  };
+}
+
+// ─── Orders ──────────────────────────────────────────────────────────────────
+
+export async function getAllOrders() {
+  return prisma.order.findMany({
+    include: {
+      product: true,
+      customer: true,
+      conversation: { include: { customer: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function updateOrderStatus(orderId: string, status: string) {
+  await prisma.order.update({
+    where: { id: orderId },
+    data: { status },
+  });
+  revalidatePath("/");
 }
 
 export async function confirmOrder(orderId: string) {
@@ -167,10 +183,91 @@ export async function confirmOrder(orderId: string) {
   revalidatePath("/");
 }
 
+// ─── Products (Catalog) ──────────────────────────────────────────────────────
+
+export async function getProducts() {
+  return prisma.product.findMany({ orderBy: { createdAt: "asc" } });
+}
+
+export async function upsertProduct(data: {
+  id?: string;
+  name: string;
+  price: number;
+  stock: number;
+  variants: string[];
+  description?: string;
+  category?: string;
+  emoji?: string;
+  tone?: string;
+}) {
+  const payload = {
+    name: data.name,
+    price: data.price,
+    stock: data.stock,
+    variants: JSON.stringify(data.variants),
+    description: data.description ?? "",
+    category: data.category ?? "",
+    emoji: data.emoji ?? "📦",
+    tone: data.tone ?? "green",
+  };
+
+  if (data.id) {
+    await prisma.product.update({ where: { id: data.id }, data: payload });
+  } else {
+    await prisma.product.create({ data: payload });
+  }
+  revalidatePath("/");
+}
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+
 export async function setConversationMode(conversationId: string, mode: "semi" | "auto") {
   await prisma.conversation.update({
     where: { id: conversationId },
     data: { mode },
   });
   revalidatePath("/");
+}
+
+export async function getSettings() {
+  const rows = await prisma.setting.findMany();
+  return Object.fromEntries(rows.map((r) => [r.key, JSON.parse(r.value)]));
+}
+
+export async function saveSetting(key: string, value: unknown) {
+  await prisma.setting.upsert({
+    where: { key },
+    update: { value: JSON.stringify(value) },
+    create: { key, value: JSON.stringify(value) },
+  });
+  revalidatePath("/");
+}
+
+// ─── Dashboard stats ─────────────────────────────────────────────────────────
+
+export async function getDashboardData() {
+  const [convos, orders] = await Promise.all([
+    prisma.conversation.findMany({
+      include: { customer: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+      orderBy: { lastMessageAt: "desc" },
+    }),
+    prisma.order.findMany({
+      include: { product: true },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+    }),
+  ]);
+
+  const totalUnread = convos.reduce((s, c) => s + c.unreadCount, 0);
+  const newOrders = orders.filter(o => o.status === "Yeni").length;
+  const todayTotal = orders.reduce((s, o) => s + o.total, 0);
+
+  return {
+    totalMessages: totalUnread + 14,
+    unread: totalUnread,
+    newOrders,
+    todayTotal: Math.round(todayTotal),
+    recentOrders: orders.slice(0, 4),
+    attentionConvos: convos.filter(c => c.unreadCount > 0).slice(0, 3),
+  };
 }

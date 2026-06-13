@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { IconSparkle } from "@/components/ui/Icon";
 
 export interface Message {
-  id: number;
+  id: string;
   direction: "incoming" | "outgoing";
   text: string;
   time: string;

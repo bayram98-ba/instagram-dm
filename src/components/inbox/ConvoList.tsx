@@ -2,7 +2,7 @@
 import { IconSearch, IconSparkle } from "@/components/ui/Icon";
 
 export interface Convo {
-  id: number;
+  id: string;
   customerName: string;
   lastMessage: string;
   lastTime: string;
@@ -13,8 +13,8 @@ export interface Convo {
 
 interface ConvoListProps {
   convos: Convo[];
-  selectedId: number | null;
-  onSelect: (id: number) => void;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 }
 
 export function ConvoList({ convos, selectedId, onSelect }: ConvoListProps) {

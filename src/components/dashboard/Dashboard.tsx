@@ -1,34 +1,50 @@
 "use client";
+import { useEffect, useState } from "react";
 import { IconChat, IconClock, IconBag, IconSparkle, IconChevronR, IconTrend } from "@/components/ui/Icon";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Thumb } from "@/components/ui/Thumb";
 import { Button } from "@/components/ui/Button";
+import { getDashboardData } from "@/app/actions/chat";
 
 type Screen = "dashboard" | "inbox" | "orders" | "catalog" | "settings";
 
 interface DashboardProps { onNav: (s: Screen) => void; }
 
-const stats = [
-  { label: "Yeni mesaj",      value: "14",      delta: "+4 dünənə görə",  up: true,  icon: IconChat,    tint: "#ECF5EF", iconColor: "#2E7D5B" },
-  { label: "Cavablanmamış",   value: "3",       delta: "tez cavabla",      up: false, icon: IconClock,   tint: "#FBEFD9", iconColor: "#C77D1A" },
-  { label: "Yeni sifariş",    value: "6",       delta: "+2 bu gün",        up: true,  icon: IconBag,     tint: "#E4ECF3", iconColor: "#4F6D8C" },
-  { label: "Qənaət edilən vaxt", value: "2.5 saat", delta: "AI sayəsində", up: true,  icon: IconSparkle, tint: "#ECF5EF", iconColor: "#2E7D5B" },
-];
+const TONE_GRADIENTS: Record<string, string> = {
+  green:  "linear-gradient(135deg,#dceee3,#ecf5ef)",
+  amber:  "linear-gradient(135deg,#fbefd9,#f3ecdd)",
+  rose:   "linear-gradient(135deg,#f7e2dc,#fdf0ee)",
+  blue:   "linear-gradient(135deg,#e4ecf3,#eef2f8)",
+  purple: "linear-gradient(135deg,#ede8f5,#f3f0fa)",
+};
 
-const recentOrders = [
-  { id: 1, emoji: "👜", tone: "amber", product: "Dəri çanta",      customer: "Nigar Ə.", variant: "Qara", total: 91, status: "Yeni" as const },
-  { id: 2, emoji: "💍", tone: "purple", product: "Gümüş üzük",     customer: "Aytən M.", variant: "17mm", total: 85, status: "Təsdiqlənib" as const },
-  { id: 3, emoji: "👗", tone: "rose",  product: "Bluzka",           customer: "Türkan Q.", variant: "M",  total: 47, status: "Göndərilib" as const },
-  { id: 4, emoji: "🕶️", tone: "blue",  product: "Günəş eynəyi",    customer: "Elvin B.", variant: "—",   total: 34, status: "Yeni" as const },
-];
+function hexToTone(hex: string) {
+  const map: Record<string, string> = {
+    "#dceee3":"green","#ecf5ef":"green","#2e7d5b":"green","#4e9a77":"green",
+    "#fbefd9":"amber","#f3ecdd":"amber","#c77d1a":"amber",
+    "#f7e2dc":"rose", "#fdf0ee":"rose", "#bf4530":"rose",
+    "#e4ecf3":"blue", "#eef2f8":"blue", "#4f6d8c":"blue",
+    "#ede8f5":"purple","#f3f0fa":"purple",
+  };
+  return map[hex?.toLowerCase?.()] ?? "green";
+}
 
-const attentionConvos = [
-  { id: 1, name: "Nigar Əliyeva",    snippet: "Çantanın qara rəngi varmı?",         unread: 2 },
-  { id: 2, name: "Türkan Qasımova",  snippet: "Ölçüm S/M arasında, hansı gərək?",  unread: 3 },
-  { id: 3, name: "Rəşad Hüseynov",  snippet: "dostavka neçədir sumqayıta?",         unread: 1 },
-];
+type DashData = Awaited<ReturnType<typeof getDashboardData>>;
 
 export function Dashboard({ onNav }: DashboardProps) {
+  const [data, setData] = useState<DashData | null>(null);
+
+  useEffect(() => {
+    getDashboardData().then(setData).catch(() => {});
+  }, []);
+
+  const stats = [
+    { label: "Yeni mesaj",         value: String(data?.totalMessages ?? "—"),  delta: "bu gün gəldi",         up: true,  icon: IconChat,    tint: "#ECF5EF", iconColor: "#2E7D5B" },
+    { label: "Cavablanmamış",      value: String(data?.unread ?? "—"),          delta: "tez cavabla",           up: false, icon: IconClock,   tint: "#FBEFD9", iconColor: "#C77D1A" },
+    { label: "Yeni sifariş",       value: String(data?.newOrders ?? "—"),       delta: "bu gün",               up: true,  icon: IconBag,     tint: "#E4ECF3", iconColor: "#4F6D8C" },
+    { label: "Bu günün satışı",    value: `${data?.todayTotal ?? "—"} ₼`,       delta: "AI sayəsində",         up: true,  icon: IconSparkle, tint: "#ECF5EF", iconColor: "#2E7D5B" },
+  ];
+
   return (
     <div className="px-6 py-6 space-y-6 max-w-[1100px]">
       {/* Hero banner */}
@@ -41,7 +57,10 @@ export function Dashboard({ onNav }: DashboardProps) {
             </div>
             <h2 className="text-[24px] font-extrabold text-[var(--ink)] tracking-[-0.02em] mb-1">Sabahınız xeyir, Aysun 👋</h2>
             <p className="text-[14px] text-[var(--ink-2)]">
-              Bu gün <strong>14 mesaj</strong> gəlib, AI-ın köməyi ilə <strong>71%-i</strong> dərhal cavablanıb.
+              Bu gün{" "}
+              <strong>{data?.totalMessages ?? "…"} mesaj</strong> gəlib,
+              AI-ın köməyi ilə{" "}
+              <strong>{data ? Math.round(((data.totalMessages - data.unread) / Math.max(data.totalMessages, 1)) * 100) : "…"}%-i</strong> dərhal cavablanıb.
             </p>
           </div>
           <Button onClick={() => onNav("inbox")} className="shrink-0">
@@ -78,22 +97,31 @@ export function Dashboard({ onNav }: DashboardProps) {
               Hamısı <IconChevronR size={14} />
             </button>
           </div>
-          <div>
-            {recentOrders.map(o => (
-              <button key={o.id} onClick={() => onNav("orders")}
-                className="w-full flex items-center gap-3 px-5 py-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors text-left">
-                <Thumb emoji={o.emoji} tone={o.tone} size={42} />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-[13.5px] text-[var(--ink)] truncate">{o.product}</div>
-                  <div className="text-[12px] text-[var(--muted)] truncate">{o.customer} · {o.variant}</div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="font-bold text-[13.5px] text-[var(--ink)]">{o.total} ₼</div>
-                  <StatusBadge status={o.status} />
-                </div>
-              </button>
-            ))}
-          </div>
+          {!data?.recentOrders?.length ? (
+            <div className="py-8 text-center text-[13px] text-[var(--muted)]">Hələ sifariş yoxdur</div>
+          ) : (
+            <div>
+              {data.recentOrders.map(o => {
+                const tone = hexToTone(o.product?.tone ?? "");
+                return (
+                  <button key={o.id} onClick={() => onNav("orders")}
+                    className="w-full flex items-center gap-3 px-5 py-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)] transition-colors text-left">
+                    <Thumb emoji={o.product?.emoji ?? "📦"} tone={tone} size={42} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[13.5px] text-[var(--ink)] truncate">{o.productName ?? o.product?.name ?? "Məhsul"}</div>
+                      <div className="text-[12px] text-[var(--muted)] truncate">
+                        {o.customerName ?? "Müştəri"} · {o.variant ?? "—"}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-[13.5px] text-[var(--ink)]">{o.total} ₼</div>
+                      <StatusBadge status={o.status as "Yeni" | "Təsdiqlənib" | "Göndərilib"} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Right column */}
@@ -103,30 +131,40 @@ export function Dashboard({ onNav }: DashboardProps) {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)]">
               <h3 className="font-bold text-[15px] text-[var(--ink)]">Diqqət tələb edir</h3>
               <span className="w-6 h-6 rounded-full bg-[var(--new-bg)] text-[var(--new)] text-[11px] font-bold flex items-center justify-center">
-                {attentionConvos.reduce((s, c) => s + c.unread, 0)}
+                {data?.attentionConvos?.reduce((s, c) => s + c.unreadCount, 0) ?? 0}
               </span>
             </div>
-            <div>
-              {attentionConvos.map(c => (
-                <div key={c.id} className="flex items-center gap-3 px-5 py-3 border-b border-[var(--border)] last:border-0">
-                  <div className="w-9 h-9 rounded-full bg-[var(--green-100)] flex items-center justify-center text-[var(--green-700)] font-bold text-[13px] shrink-0">
-                    {c.name.charAt(0)}
+            {!data?.attentionConvos?.length ? (
+              <div className="py-6 text-center text-[13px] text-[var(--muted)]">Oxunmamış söhbət yoxdur 🎉</div>
+            ) : (
+              <div>
+                {data.attentionConvos.map(c => (
+                  <div key={c.id} className="flex items-center gap-3 px-5 py-3 border-b border-[var(--border)] last:border-0">
+                    <div className="w-9 h-9 rounded-full bg-[var(--green-100)] flex items-center justify-center text-[var(--green-700)] font-bold text-[13px] shrink-0">
+                      {(c.customer?.name ?? "M").charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[13px] text-[var(--ink)] truncate">{c.customer?.name ?? "Müştəri"}</div>
+                      <div className="text-[12px] text-[var(--muted)] truncate">
+                        {c.messages[0]?.text ?? "Yeni mesaj"}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="soft" onClick={() => onNav("inbox")}>Cavabla</Button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-[13px] text-[var(--ink)] truncate">{c.name}</div>
-                    <div className="text-[12px] text-[var(--muted)] truncate">{c.snippet}</div>
-                  </div>
-                  <Button size="sm" variant="soft" onClick={() => onNav("inbox")}>Cavabla</Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Today's sales */}
           <div className="rounded-[var(--r-lg)] p-5 text-white" style={{ background: "var(--green-500)" }}>
             <div className="text-[12.5px] font-semibold opacity-80 mb-1">Bu günün satışı</div>
-            <div className="text-[36px] font-extrabold tracking-[-0.03em] leading-none mb-1">312 ₼</div>
-            <div className="text-[12.5px] opacity-75">6 sifariş · orta çek 52 ₼</div>
+            <div className="text-[36px] font-extrabold tracking-[-0.03em] leading-none mb-1">
+              {data?.todayTotal ?? "—"} ₼
+            </div>
+            <div className="text-[12.5px] opacity-75">
+              {data?.newOrders ?? "—"} sifariş
+            </div>
           </div>
         </div>
       </div>
