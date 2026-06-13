@@ -77,82 +77,30 @@ const prisma = new PrismaClient({ adapter } as any);
 
 ---
 
+## Tamamlananlar (davam)
+
+### ✅ Mərhələ 2 — UI Komponentlər (Session 2, 2026-06-14)
+
+Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 200 qaytarır.
+
+**Yaradılan fayllar:**
+- `src/components/ui/` — Icon (37 SVG), StatusBadge, Thumb, AiTag, Button
+- `src/components/layout/` — Sidebar, Topbar, BottomTabs, AppShell
+- `src/components/inbox/` — ModeToggle, ChatHeader, ConvoList, ChatThread, AiComposer, OrderPanel, Inbox
+- `src/components/dashboard/Dashboard.tsx`
+- `src/components/orders/Orders.tsx`
+- `src/components/catalog/Catalog.tsx`
+- `src/components/settings/Settings.tsx`
+
+**Texniki düzəltmə:**
+- `globals.css` — Google Fonts `@import` Tailwind 4 PostCSS conflict → `layout.tsx` `<link>` olaraq köçürüldü
+- `next.config.ts` — `turbopack.root` əlavə edildi
+
+---
+
 ## Qalan işlər
 
-### 🔲 UI Komponentlər (növbəti session)
-
-Handoff faylı: `Sifaris-handoff-full.md` — bütün JSX kodu mövcuddur, Next.js komponentlərinə çevrilməlidir.
-
-**Prioritet sırası (handoff tövsiyəsinə uyğun):**
-
-#### 1. App Shell + Routing
-- `src/components/layout/Sidebar.tsx` — brand mark, channel switcher, nav items, user chip
-- `src/components/layout/Topbar.tsx` — başlıq, axtarış, zəng ikonu
-- `src/components/layout/BottomTabs.tsx` — mobil tab bar (900px altında)
-- `src/components/layout/AppShell.tsx` — sidebar+main birləşdirici
-- `src/app/page.tsx` — aktiv ekran routing (activeScreen state)
-- Nav items: İcmal · Söhbətlər · Sifarişlər · Məhsul kataloqu · Tənzimlər
-- Responsive: ≥900px sidebar, <900px bottom tabs
-
-#### 2. Shared Components
-- `src/components/ui/Icon.tsx` — handoff-dakı inline SVG icon set (home, chat, orders, catalog, settings, sparkle, send, edit, check, bag, truck, card, cash, wallet, phone, pin, plus, download, x, clock, trend, bell, user, chevronR/L/D, search, more, instagram, grid, moon, info, image, star, filter, refresh, lock, tag, box)
-- `src/components/ui/StatusBadge.tsx` — Yeni (amber), Təsdiqlənib (green), Göndərilib (slate)
-- `src/components/ui/Thumb.tsx` — emoji placeholder məhsul şəkli
-- `src/components/ui/AiTag.tsx` — "✨ AI" chip (sahə AI tərəfindən doldurulub)
-- `src/components/ui/Button.tsx` — btn-primary, btn-soft, btn-ghost, btn-sm, btn-lg
-- `src/components/ui/Badge.tsx` — badge-new, badge-confirmed, badge-shipped
-
-#### 3. Söhbətlər / Inbox — HERO EKRAN
-- **Split layout (default):** 3 sütun — ConvoList (248px) | ChatThread (flex) | OrderPanel (332px)
-- **Focus layout:** ConvoList + böyük chat, OrderPanel slide-over drawer
-- **Triage layout:** 2-sütunlu kart grid, quick approve
-- **Mobil:** list → tap → full-screen conversation (Söhbət | Sifariş tab)
-
-**Komponenetlər:**
-- `src/components/inbox/ConvoList.tsx` — axtarış + söhbət sıraları + online dot + unread badge
-- `src/components/inbox/ChatThread.tsx` — bubble-in/out/ai, day separator, typing indicator
-- `src/components/inbox/AiComposer.tsx` — AI draft göstər → Göndər/Redaktə et/Özüm yazaram
-- `src/components/inbox/OrderPanel.tsx` — sifariş kartı, sahə sıraları, "✨ AI" taglar, fillIn animasiya
-- `src/components/inbox/ModeToggle.tsx` — Yarı-avtomat/Avtomatik pill switch
-- `src/components/inbox/ChatHeader.tsx` — avatar + Instagram badge + mode toggle
-
-**Bubble tipləri:**
-- `bubble-in`: ağ kart, 1px border, aşağı-sol radius 7px
-- `bubble-out`: yaşıl #2E7D5B, ağ mətn, aşağı-sağ radius 7px
-- `bubble-ai`: green-050 fon, dashed green-400 border, "AI avtomatik cavab" label
-
-**OrderPanel canlı doldurma:**
-- Boş sahələr: italic muted "gözlənilir…"
-- Dolu sahə: dəyər + "✨ AI" chip (aiFilledFields-dədirsə)
-- Yeni doldurulan sahə: `fillIn` animasiya (0.5s yaşıl highlight → şəffaf)
-- N/6 sayacı: product/customer/phone/address/delivery/payment sahələrindən neçəsi dolu
-
-#### 4. İcmal (Dashboard)
-- Hero banner: "Sabahınız xeyir, Aysun 👋" + AI aktiv chip + "Söhbətlərə bax" button
-- 4 stat kartı: Yeni mesaj, Cavablanmamış, Yeni sifariş, Qənaət edilən vaxt
-- Son sifarişlər siyahısı (1.5fr)
-- Diqqət tələb edir (unread söhbətlər, 1fr)
-- Bu günün satışı (yaşıl kart, 312₼)
-
-#### 5. Sifarişlər
-- Filter tabs: Hamısı / Yeni / Təsdiqlənib / Göndərilib (saylarla)
-- Desktop: table (sifariş, müştəri, ünvan, ödəniş, məbləğ, status)
-- Mobil: stacked kartlar
-- OrderDrawer: sifariş detalları + status dəyişdirmə segmented control
-
-#### 6. Məhsul Kataloqu
-- Info banner: "✨ AI cavabları məhz bu kataloqdan qurur."
-- Responsive product grid (minmax 200px)
-- Stok badge: Bitib (red) / Az qalıb·N (amber) / N ədəd (green)
-- ProductDrawer: ad, qiymət, stok, variant chips, təsvir
-
-#### 7. Tənzimləmələr
-- Sol nav (230px): Instagram hesabı, Çatdırılma, Ödəniş, FAQ, AI rejimi
-- Instagram section: bağlı hesab kartı
-- Çatdırılma: zona sıraları + qiymət
-- Ödəniş: toggle sıraları
-- FAQ: editable Q/A kartları
-- AI rejimi: Yarı-avtomat vs Avtomatik radio
+### 🔲 Mərhələ 3 — Canlı data + real AI cavablar
 
 ---
 
