@@ -173,17 +173,33 @@ Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 
 
 ---
 
+---
+
+### ✅ Mərhələ 6-A — Meta App Review Hazırlığı (Session 6, 2026-06-15)
+
+- `src/app/privacy/page.tsx` — Privacy Policy (English + Azərbaycan dili xülasəsi)
+- `src/app/terms/page.tsx` — Terms of Service
+- `META_REVIEW.md` — tam submission guide: izahat mətni, test case-lər, checklist
+- `.env.example` — `NEXT_PUBLIC_APP_URL` əlavə edildi
+- Build: `✓ Compiled successfully` — `/privacy` + `/terms` static page kimi
+
+---
+
 ## Qalan işlər
 
-### 🔲 Mərhələ 6 — Deployment + Meta Review
+### 🔲 Mərhələ 6-B — Deployment + Meta Panel
 
 - [ ] Production PostgreSQL (Neon / Vercel Postgres / Supabase)
 - [ ] `schema.prisma`-da `provider = "postgresql"` dəyişikliyi
 - [ ] `prisma migrate deploy` production-da
-- [ ] Vercel-ə deploy + env variables qurulumu
-- [ ] Meta App Review — `instagram_manage_messages` izni
-- [ ] Uzun ömürlü page access token
-- [ ] Production domain ilə Instagram webhook aktivləşdirmə
+- [ ] Vercel-ə deploy + `NEXT_PUBLIC_APP_URL` env variable
+- [ ] Meta Developer Panel-də App yaratmaq / konfiqurasiya
+- [ ] Privacy Policy + Terms URL-lərini panelə daxil etmək
+- [ ] `instagram_manage_messages` izni submission
+- [ ] Business verification (Meta)
+- [ ] Test user əlavə etmək
+- [ ] Webhook URL-i production domain ilə aktivləşdirmək
+- [ ] Uzun ömürlü page access token almaq
 
 ---
 
