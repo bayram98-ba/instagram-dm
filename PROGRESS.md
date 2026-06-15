@@ -185,21 +185,59 @@ Bütün 5 ekran + AppShell tam tamamlandı. App `http://localhost:3000`-da HTTP 
 
 ---
 
+---
+
+### ✅ Mərhələ 6-B — PostgreSQL Migrasiya + Deploy Konfiqurasiyası (Session 6, 2026-06-15)
+
+- `prisma/migrations/20260615000000_init_postgresql/migration.sql` — PostgreSQL-ə uyğun migrasiya SQL-i (köhnə SQLite migrasiyası silindi)
+- `vercel.json` — build zamanı `sed` ilə provider avtomatik `sqlite → postgresql` dəyişir
+- `package.json` — `db:migrate` skripti əlavə edildi
+- `.env.example` — PostgreSQL `DATABASE_URL` nümunəsi əlavə edildi
+- **Texniki qeyd:** `schema.prisma` lokal dev üçün `sqlite` qalır; Vercel build-i onu avtomatik `postgresql`-ə çevirir
+
+#### Deploy cəhdləri:
+- **Vercel** — istifadəçi problem yaşadı (xəta detalı bilinmir)
+- **Railway** — pullu olduğundan kənara qoyuldu
+- **Supabase + hosting** — növbəti session-da davam ediləcək
+
+---
+
 ## Qalan işlər
 
-### 🔲 Mərhələ 6-B — Deployment + Meta Panel
+### 🔲 Mərhələ 6-C — Supabase + Hosting Deploy
 
-- [ ] Production PostgreSQL (Neon / Vercel Postgres / Supabase)
-- [ ] `schema.prisma`-da `provider = "postgresql"` dəyişikliyi
-- [ ] `prisma migrate deploy` production-da
-- [ ] Vercel-ə deploy + `NEXT_PUBLIC_APP_URL` env variable
-- [ ] Meta Developer Panel-də App yaratmaq / konfiqurasiya
-- [ ] Privacy Policy + Terms URL-lərini panelə daxil etmək
-- [ ] `instagram_manage_messages` izni submission
+#### 1. Supabase (pulsuz PostgreSQL)
+- [ ] [supabase.com](https://supabase.com) → yeni proje: `sifarish`, region: West EU
+- [ ] Connection string-i kopyala: `postgresql://postgres:[PASS]@db.xxxx.supabase.co:5432/postgres`
+- [ ] `.env`-ə əlavə et: `DATABASE_URL=postgresql://...`
+- [ ] `npx prisma migrate deploy` — migrasiyanı Supabase-ə tətbiq et
+- [ ] `npm run db:seed` — test datanı Supabase-ə yüklə
+
+#### 2. Next.js Hosting (pulsuz seçimlər)
+- [ ] Vercel-dəki problemi müəyyən et (xəta mesajı) → düzəlt
+- [ ] **ƏGƏR Vercel işləmirsə:** Netlify alternativ kimi cəhd et
+  - [netlify.com](https://netlify.com) → "Import from GitHub" → `instagram-dm`
+  - Build command: `npm run build`
+  - Environment Variables əlavə et (DATABASE_URL, ANTHROPIC_API_KEY, META_*)
+
+#### 3. Production sonrası
+- [ ] `NEXT_PUBLIC_APP_URL` real domain ilə yenilə
+- [ ] Meta Developer Panel → App → Privacy Policy + Terms URL-lərini daxil et
+- [ ] Webhook URL-i production domain ilə aktivləşdir
+- [ ] `instagram_manage_messages` izni üçün submission göndər
 - [ ] Business verification (Meta)
-- [ ] Test user əlavə etmək
-- [ ] Webhook URL-i production domain ilə aktivləşdirmək
-- [ ] Uzun ömürlü page access token almaq
+- [ ] Uzun ömürlü Page Access Token al
+
+---
+
+## Növbəti session üçün prompt
+
+```
+PROGRESS.md-i oxu. Sifarish layihəsi Mərhələ 6-B tamamdır.
+Qalan: Mərhələ 6-C — Supabase pulsuz PostgreSQL qur + Next.js hosting seç.
+Supabase addımları PROGRESS.md-də yazılıb.
+Əgər Vercel problemi həll olunmursa, Netlify ilə cəhd et.
+```
 
 ---
 
