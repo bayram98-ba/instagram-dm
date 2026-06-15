@@ -4,6 +4,8 @@ generator client {
 }
 
 datasource db {
+  // Local dev: sqlite  |  Production (Vercel): postgresql
+  // Change to "postgresql" after setting DATABASE_URL to Neon connection string
   provider = "sqlite"
 }
 

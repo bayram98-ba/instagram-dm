@@ -1,4 +1,4 @@
 {
-  "buildCommand": "npx prisma generate && next build",
+  "buildCommand": "sed -i 's/provider = \"sqlite\"/provider = \"postgresql\"/' prisma/schema.prisma && sed -i 's/provider = \"sqlite\"/provider = \"postgresql\"/' prisma/migrations/migration_lock.toml && npx prisma generate && npx prisma migrate deploy && next build",
   "framework": "nextjs"
 }
